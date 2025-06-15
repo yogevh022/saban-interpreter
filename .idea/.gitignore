@@ -1,0 +1,8 @@
+# Default ignored files
+/../../CustomInterpreter /.idea/shelf/
+/../../CustomInterpreter /.idea/workspace.xml
+# Editor-based HTTP Client requests
+/../../CustomInterpreter /.idea/httpRequests/
+# Datasource local storage ignored files
+/../../CustomInterpreter /.idea/dataSources/
+/../../CustomInterpreter /.idea/dataSources.local.xml
