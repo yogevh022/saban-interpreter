@@ -1,55 +1,7 @@
-from typing import List, Optional, Union, Any
+from typing import Literal
 
-from pydantic import BaseModel, field_validator
-
-from lexer import TokenType
-
-
-class Primitive(BaseModel):
-    value: Any
-
-class Number(Primitive):
-    value: int | float
-
-    def __repr__(self):
-        return f"Number({self.value})"
-
-class String(Primitive):
-    value: str
-
-    def __repr__(self):
-        return f"String({self.value})"
-
-class Identifier(BaseModel):
-    address: List[Union[Primitive, 'Identifier', 'FunctionCall']] = []
-
-    @property
-    def dereferenced(self) -> Number | String:
-        return String(value=f'*{self.__repr__()}')
-
-    def validate_address(self):
-        if any(not isinstance(a, (Primitive, Identifier, FunctionCall)) for a in self.address):
-            raise ValueError("All elements in address must be str or int")
-
-    def __repr__(self):
-        return f"Identifier({'.'.join(str(a) for a in self.address)})"
-
-class FunctionCall(BaseModel):
-    identifier: Identifier # identifier of the function
-    args: List[Union[Primitive, Identifier, 'FunctionCall']] = []
-
-
-def binary_op(op: str, left, right):
-    if op == '+':
-        return Number(value=left.value + right.value)
-    elif op == '-':
-        return Number(value=left.value - right.value)
-    elif op == '*':
-        return Number(value=left.value * right.value)
-    elif op == '/':
-        return Number(value=left.value / right.value)
-    else:
-        raise ValueError(f"Unsupported binary operator: {op}")
+from lexer import token_type_is_reserved, TokenType, ASSIGNMENT_OPERATORS
+from parser.types import *
 
 
 class Parser:
@@ -72,7 +24,7 @@ class Parser:
             self.eat(TokenType.STRING)
             return String(value=token.value)
         elif token.type == TokenType.IDENTIFIER:
-            return self.identity()
+            return self.identity() # identifier or function call (which results in Identifier)
         elif token.type == TokenType.LPAREN:
             self.eat(TokenType.LPAREN)
             expr = self.expr()
@@ -84,7 +36,7 @@ class Parser:
     def identity(self):
         identifier = Identifier()
         dot = True
-        while self.current_token.type in (TokenType.IDENTIFIER, TokenType.DOT, TokenType.LBRACKET):
+        while self.current_token.type in (TokenType.IDENTIFIER, TokenType.DOT, TokenType.LBRACKET, TokenType.LPAREN):
             token = self.current_token
             if token.type == TokenType.IDENTIFIER:
                 if not dot:
@@ -102,10 +54,24 @@ class Parser:
                 index = self.expr()
                 self.eat(TokenType.RBRACKET)
                 identifier.address.append(index)
+            elif token.type == TokenType.LPAREN:
+                if dot:
+                    raise Exception("Unexpected function call without identifier")
+                self.eat(TokenType.LPAREN)
+                args = self.args() if self.current_token.type != TokenType.RPAREN else []
+                self.eat(TokenType.RPAREN)
+                identifier = Identifier(address=[FunctionCall(identifier=identifier, args=args)])
         if dot:
             raise Exception("Unexpected dot at the end of identifier")
         identifier.validate_address() # raise exception if invalid indexing e.g. with float
         return identifier
+
+    def args(self):
+        args = [self.expr()]
+        while self.current_token.type == TokenType.COMMA:
+            self.eat(TokenType.COMMA)
+            args.append(self.expr())
+        return args
 
     def term(self):
         node = self.factor()
@@ -115,7 +81,7 @@ class Parser:
                 self.eat(TokenType.MULTIPLY)
             elif token.type == TokenType.DIVIDE:
                 self.eat(TokenType.DIVIDE)
-            node = binary_op(token.value, node, self.factor())
+            node = BinaryOperation(operator=token.type, left=node, right=self.factor())
         return node
 
     def expr(self):
@@ -126,18 +92,26 @@ class Parser:
                 self.eat(TokenType.PLUS)
             elif token.type == TokenType.MINUS:
                 self.eat(TokenType.MINUS)
-            node = binary_op(token.value, node, self.term())
+            node = BinaryOperation(operator=token.type, left=node, right=self.term())
         return node
 
+    def statement(self):
+        if token_type_is_reserved(self.current_token.type):
+            return # TODO handle reserved keywords
+        expression = self.expr()
+        if isinstance(expression, Identifier):
+            token = self.current_token
+            if token.type in ASSIGNMENT_OPERATORS:
+                self.eat(token.type)
+                value = self.statement()
+                value = BinaryOperation(operator=token.type, left=expression, right=value) if token.type != TokenType.ASSIGN else value
+                return Assign(identifier=expression, value=value)
+            if token.type in (TokenType.SEMICOLON, TokenType.NEWLINE, TokenType.EOF):
+                self.eat(token.type)
+                return expression
+            raise Exception(f"Unexpected token: {token}")
+        return expression
 
     def parse(self):
-        z = self.expr()
+        z = self.statement()
         print(z)
-
-if __name__ == '__main__':
-    from lexer import Lexer, TokenType
-
-    input_code = """object.prop['0'][0]"""
-    lx = Lexer(input_code)
-    parser = Parser(lx)
-    parser.parse()

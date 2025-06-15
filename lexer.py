@@ -14,7 +14,8 @@ class TokenType(str, Enum):
     MODULUS = 'MODULUS'
     EXPONENT = 'EXPONENT'
     EQUALS = 'EQUALS'
-    CHECK_EQUALS = 'CHECK_EQUALS'
+    INCREMENT = 'INCREMENT'
+    DECREMENT = 'DECREMENT'
     DOT = 'DOT'
     LBRACKET = 'LBRACKET'
     RBRACKET = 'RBRACKET'
@@ -28,6 +29,47 @@ class TokenType(str, Enum):
     COMMA = 'COMMA'
     BLANK = 'BLANK'
     EOF = 'EOF'
+
+    # assignment operators
+    ASSIGN = 'ASSIGN'
+    ADDITION_ASSIGN = 'ADDITION_ASSIGN'
+    SUBTRACTION_ASSIGN = 'SUBTRACTION_ASSIGN'
+    MULTIPLICATION_ASSIGN = 'MULTIPLICATION_ASSIGN'
+    DIVISION_ASSIGN = 'DIVISION_ASSIGN'
+    MODULUS_ASSIGN = 'MODULUS_ASSIGN'
+    EXPONENT_ASSIGN = 'EXPONENT_ASSIGN'
+
+    # reserved keywords
+    IF = 'IF'
+    ELSE = 'ELSE'
+    WHILE = 'WHILE'
+    FN = 'FN'
+    RETURN = 'RETURN'
+    BREAK = 'BREAK'
+    CONTINUE = 'CONTINUE'
+
+ASSIGNMENT_OPERATORS = {
+    TokenType.ASSIGN,
+    TokenType.ADDITION_ASSIGN,
+    TokenType.SUBTRACTION_ASSIGN,
+    TokenType.MULTIPLICATION_ASSIGN,
+    TokenType.DIVISION_ASSIGN,
+    TokenType.MODULUS_ASSIGN,
+    TokenType.EXPONENT_ASSIGN
+}
+
+RESERVED_KEYWORDS = {
+    'if': TokenType.IF,
+    'else': TokenType.ELSE,
+    'while': TokenType.WHILE,
+    'fn': TokenType.FN,
+    'return': TokenType.RETURN,
+    'break': TokenType.BREAK,
+    'continue': TokenType.CONTINUE
+}
+
+def token_type_is_reserved(token_type: TokenType) -> bool:
+    return token_type in RESERVED_KEYWORDS.values()
 
 
 class Token(BaseModel):
@@ -79,11 +121,13 @@ class Lexer:
         self.advance()
         return Token(type=TokenType.STRING, value=result)
 
-    def identifier(self):
+    def keyword(self):
         result = ''
         while self.current_char is not None and (self.current_char.isalnum() or self.current_char == '_'):
             result += self.current_char
             self.advance()
+        if result in RESERVED_KEYWORDS:
+            return Token(type=RESERVED_KEYWORDS[result], value=result)
         return Token(type=TokenType.IDENTIFIER, value=result)
 
     def get_next_token(self) -> Token:
@@ -94,7 +138,7 @@ class Lexer:
             if self.current_char.isdigit():
                 return self.number()
             if self.current_char.isalpha() or self.current_char == '_':
-                return self.identifier()
+                return self.keyword() # identifiers and keywords
             if self.current_char in ('"', "'"):
                 return self.string(self.current_char)
             if self.current_char == '.':
@@ -123,28 +167,52 @@ class Lexer:
                 return Token(type=TokenType.RCURLY, value='}')
             if self.current_char == '+':
                 self.advance()
+                if self.current_char == '+':
+                    self.advance()
+                    return Token(type=TokenType.INCREMENT, value='++')
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(type=TokenType.ADDITION_ASSIGN, value='+=')
                 return Token(type=TokenType.PLUS, value='+')
             if self.current_char == '-':
                 self.advance()
+                if self.current_char == '-':
+                    self.advance()
+                    return Token(type=TokenType.DECREMENT, value='--')
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(type=TokenType.SUBTRACTION_ASSIGN, value='-=')
                 return Token(type=TokenType.MINUS, value='-')
             if self.current_char == '*':
                 self.advance()
                 if self.current_char == '*':
                     self.advance()
+                    if self.current_char == '=':
+                        self.advance()
+                        return Token(type=TokenType.EXPONENT_ASSIGN, value='**=')
                     return Token(type=TokenType.EXPONENT, value='**')
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(type=TokenType.MULTIPLICATION_ASSIGN, value='*=')
                 return Token(type=TokenType.MULTIPLY, value='*')
             if self.current_char == '/':
                 self.advance()
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(type=TokenType.DIVISION_ASSIGN, value='/=')
                 return Token(type=TokenType.DIVIDE, value='/')
             if self.current_char == '%':
                 self.advance()
+                if self.current_char == '=':
+                    self.advance()
+                    return Token(type=TokenType.MODULUS_ASSIGN, value='%=')
                 return Token(type=TokenType.MODULUS, value='%')
             if self.current_char == '=':
                 self.advance()
                 if self.current_char == '=':
                     self.advance()
-                    return Token(type=TokenType.CHECK_EQUALS, value='==')
-                return Token(type=TokenType.EQUALS, value='=')
+                    return Token(type=TokenType.EQUALS, value='==')
+                return Token(type=TokenType.ASSIGN, value='=')
             if self.current_char == ';':
                 self.advance()
                 return Token(type=TokenType.SEMICOLON, value=';')
