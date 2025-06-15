@@ -21,22 +21,22 @@ class String(Primitive):
         return f"String({self.value})"
 
 class Identifier(BaseModel):
-    address: List[Union[str, int]] = []
+    address: List[Union[Primitive, 'Identifier', 'FunctionCall']] = []
 
     @property
     def dereferenced(self) -> Number | String:
         return String(value=f'*{self.__repr__()}')
 
     def validate_address(self):
-        if any(not isinstance(a, (str, int)) for a in self.address):
+        if any(not isinstance(a, (Primitive, Identifier, FunctionCall)) for a in self.address):
             raise ValueError("All elements in address must be str or int")
 
     def __repr__(self):
         return f"Identifier({'.'.join(str(a) for a in self.address)})"
 
 class FunctionCall(BaseModel):
-    identifier: Identifier
-    args: List[Union[Primitive, Identifier]] = []
+    identifier: Identifier # identifier of the function
+    args: List[Union[Primitive, Identifier, 'FunctionCall']] = []
 
 
 def binary_op(op: str, left, right):
@@ -90,7 +90,7 @@ class Parser:
                 if not dot:
                     raise Exception(f"Unexpected identifier: {token.value}")
                 self.eat(TokenType.IDENTIFIER)
-                identifier.address.append(token.value)
+                identifier.address.append(String(value=token.value))
                 dot = False
             elif token.type == TokenType.DOT:
                 if dot:
@@ -101,8 +101,7 @@ class Parser:
                 self.eat(TokenType.LBRACKET)
                 index = self.expr()
                 self.eat(TokenType.RBRACKET)
-                identifier_index = index.dereferenced.value if isinstance(index, Identifier) else index.value
-                identifier.address.append(identifier_index)
+                identifier.address.append(index)
         if dot:
             raise Exception("Unexpected dot at the end of identifier")
         identifier.validate_address() # raise exception if invalid indexing e.g. with float
@@ -132,14 +131,13 @@ class Parser:
 
 
     def parse(self):
-        z = self.factor()
-        print(z.dereferenced)
+        z = self.expr()
+        print(z)
 
 if __name__ == '__main__':
     from lexer import Lexer, TokenType
 
     input_code = """object.prop['0'][0]"""
     lx = Lexer(input_code)
-    print()  # Print first 10 tokens for debugging
     parser = Parser(lx)
     parser.parse()
