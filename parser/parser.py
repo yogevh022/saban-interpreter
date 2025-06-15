@@ -1,6 +1,6 @@
 from typing import Literal
 
-from lexer import token_type_is_reserved, TokenType, ASSIGNMENT_OPERATORS
+from lexer import token_type_is_reserved, TokenType, ASSIGNMENT_OPERATORS, ARITHMETIC_OPERATORS, END_LINE_TOKENS
 from parser.types import *
 
 
@@ -50,13 +50,13 @@ class Parser:
                 self.eat(TokenType.DOT)
                 dot = True
             elif token.type == TokenType.LBRACKET:
+                dot = False
                 self.eat(TokenType.LBRACKET)
                 index = self.expr()
                 self.eat(TokenType.RBRACKET)
                 identifier.address.append(index)
             elif token.type == TokenType.LPAREN:
-                if dot:
-                    raise Exception("Unexpected function call without identifier")
+                dot = False
                 self.eat(TokenType.LPAREN)
                 args = self.args() if self.current_token.type != TokenType.RPAREN else []
                 self.eat(TokenType.RPAREN)
@@ -95,21 +95,43 @@ class Parser:
             node = BinaryOperation(operator=token.type, left=node, right=self.term())
         return node
 
+    def identifier_start_statement(self, expression):
+        token = self.current_token
+        if token.type in ASSIGNMENT_OPERATORS:
+            self.eat(token.type)
+            value = self.statement()
+            value = BinaryOperation(operator=token.type, left=expression,
+                                    right=value) if token.type != TokenType.ASSIGN else value
+            return Assign(identifier=expression, value=value)
+        if token.type in (TokenType.INCREMENT, TokenType.DECREMENT):
+            self.eat(token.type)
+            if self.current_token.type not in END_LINE_TOKENS:
+                raise Exception(
+                    f"Expected end of line after increment/decrement operator, got {self.current_token.type}")
+            value = BinaryOperation(operator=token.type, left=expression, right=Number(value=1))
+            return Assign(identifier=expression, value=value)
+        if token.type in (TokenType.SEMICOLON, TokenType.NEWLINE, TokenType.EOF):
+            self.eat(token.type)
+            return expression
+        raise Exception(f"Unexpected token: {token}")
+
+    def value_start_statement(self, expression):
+        token = self.current_token
+        if token.type in ARITHMETIC_OPERATORS:
+            self.eat(token.type)
+            return BinaryOperation(operator=token.type, left=expression, right=self.expr())
+        raise Exception(f"Unexpected operator {token.type} for type {expression}")
+
+
     def statement(self):
         if token_type_is_reserved(self.current_token.type):
             return # TODO handle reserved keywords
         expression = self.expr()
         if isinstance(expression, Identifier):
-            token = self.current_token
-            if token.type in ASSIGNMENT_OPERATORS:
-                self.eat(token.type)
-                value = self.statement()
-                value = BinaryOperation(operator=token.type, left=expression, right=value) if token.type != TokenType.ASSIGN else value
-                return Assign(identifier=expression, value=value)
-            if token.type in (TokenType.SEMICOLON, TokenType.NEWLINE, TokenType.EOF):
-                self.eat(token.type)
-                return expression
-            raise Exception(f"Unexpected token: {token}")
+            return self.identifier_start_statement(expression)
+        if isinstance(expression, (Primitive, BinaryOperation)):
+            return self.value_start_statement(expression)
+
         return expression
 
     def parse(self):

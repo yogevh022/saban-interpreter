@@ -4,31 +4,44 @@ from pydantic import BaseModel
 
 
 class TokenType(str, Enum):
+    # types
     IDENTIFIER = "IDENTIFIER"
     NUMBER = 'NUMBER'
     STRING = 'STRING'
+
+    # comparison operators
+    EQUALS = 'EQUALS'
+
+    # punctuation
+    COLON = 'COLON'
+    SEMICOLON = 'SEMICOLON'
+    COMMA = 'COMMA'
+    DOT = 'DOT'
+
+    # special
+    NEWLINE = 'NEWLINE'
+    BLANK = 'BLANK'
+    EOF = 'EOF'
+
+    # brackets and parentheses
+    LPAREN = 'LPAREN'
+    RPAREN = 'RPAREN'
+    LBRACKET = 'LBRACKET'
+    RBRACKET = 'RBRACKET'
+    LCURLY = 'LCURLY'
+    RCURLY = 'RCURLY'
+
+    # arithmetic operators
     PLUS = 'PLUS'
     MINUS = 'MINUS'
     MULTIPLY = 'MULTIPLY'
     DIVIDE = 'DIVIDE'
     MODULUS = 'MODULUS'
     EXPONENT = 'EXPONENT'
-    EQUALS = 'EQUALS'
+
+    # increment and decrement operators
     INCREMENT = 'INCREMENT'
     DECREMENT = 'DECREMENT'
-    DOT = 'DOT'
-    LBRACKET = 'LBRACKET'
-    RBRACKET = 'RBRACKET'
-    LPAREN = 'LPAREN'
-    RPAREN = 'RPAREN'
-    LCURLY = 'LCURLY'
-    RCURLY = 'RCURLY'
-    NEWLINE = 'NEWLINE'
-    COLON = 'COLON'
-    SEMICOLON = 'SEMICOLON'
-    COMMA = 'COMMA'
-    BLANK = 'BLANK'
-    EOF = 'EOF'
 
     # assignment operators
     ASSIGN = 'ASSIGN'
@@ -47,6 +60,21 @@ class TokenType(str, Enum):
     RETURN = 'RETURN'
     BREAK = 'BREAK'
     CONTINUE = 'CONTINUE'
+
+END_LINE_TOKENS = {
+    TokenType.SEMICOLON,
+    TokenType.NEWLINE,
+    TokenType.EOF
+}
+
+ARITHMETIC_OPERATORS = {
+    TokenType.PLUS,
+    TokenType.MINUS,
+    TokenType.MULTIPLY,
+    TokenType.DIVIDE,
+    TokenType.MODULUS,
+    TokenType.EXPONENT
+}
 
 ASSIGNMENT_OPERATORS = {
     TokenType.ASSIGN,
