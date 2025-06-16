@@ -5,7 +5,8 @@ from lexer.types import TokenType, UNARY_OPERATORS
 
 
 class Type(BaseModel):
-    pass
+    def __repr__(self):
+        return self.__str__()
 
 
 class Primitive(Type):
@@ -18,9 +19,6 @@ class Number(Primitive):
     def __str__(self):
         return f"Number({self.value})"
 
-    def __repr__(self):
-        return self.__str__()
-
 
 class String(Primitive):
     value: str
@@ -28,26 +26,45 @@ class String(Primitive):
     def __str__(self):
         return f"String({self.value})"
 
-    def __repr__(self):
-        return self.__str__()
-
 
 class Identifier(Type):
-    address: List[Type] = []
+    address: List[Type] = list()
 
     @property
     def dereferenced(self) -> Number | String:
         return String(value=f'*{self.__str__()}')
 
-    def validate_address(self):
-        if any(not isinstance(a, (Primitive, Identifier, FunctionCall)) for a in self.address):
-            raise ValueError("All elements in address must be str or int")
-
     def __str__(self):
         return f"Identifier({'.'.join(str(a) for a in self.address)})"
 
-    def __repr__(self):
-        return self.__str__()
+
+class Array(Type):
+    elements: List[Type] = list()
+
+    def __str__(self):
+        return f"Array({', '.join(str(e) for e in self.elements)})"
+
+
+class ObjectProperty(Type):
+    key: Primitive
+    value: Type
+
+    def __str__(self):
+        return f"ObjectProperty({self.key}: {self.value})"
+
+    @model_validator(mode='before')
+    @classmethod
+    def validate_object_property(cls, values):
+        if not isinstance(values['key'], Primitive):
+            raise ValueError(f'Object key must be a primitive type, got {type(values['key']).__name__}')
+        return values
+
+
+class Object(Type):
+    properties: List[ObjectProperty] = []
+
+    def __str__(self):
+        return f"Object({self.properties})"
 
 
 class BinaryOperation(Type):
@@ -57,9 +74,6 @@ class BinaryOperation(Type):
 
     def __str__(self):
         return f"BinaryOperation({self.left} {self.operator.value} {self.right})"
-
-    def __repr__(self):
-        return self.__str__()
 
     @model_validator(mode='before')
     @classmethod
@@ -76,13 +90,10 @@ class BinaryOperation(Type):
 
 class FunctionCall(Type):
     identifier: Identifier # identifier of the function
-    args: List[Type] = []
+    args: List[Type] = list()
 
     def __str__(self):
         return f'{self.identifier.__str__()}({self.args})'
-
-    def __repr__(self):
-        return self.__str__()
 
 
 class Assign(Type):
@@ -93,5 +104,11 @@ class Assign(Type):
     def __str__(self):
         return f"Assign({self.identifier} = {self.value})"
 
-    def __repr__(self):
-        return self.__str__()
+    @model_validator(mode='before')
+    @classmethod
+    def validate_assign(cls, values):
+        if not isinstance(values['identifier'], Identifier):
+            raise ValueError(f"Assign identifier must be an Identifier, got {type(values['identifier']).__name__}")
+        if not isinstance(values['value'], Type):
+            raise ValueError(f"Assign value must be a Type, got {type(values['value']).__name__}")
+        return values

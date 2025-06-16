@@ -1,4 +1,6 @@
-from lexer.types import ASSIGNMENT_OPERATORS, ARITHMETIC_OPERATORS, END_LINE_TOKENS
+from typing import Callable
+
+from lexer.types import ASSIGNMENT_OPERATORS, ARITHMETIC_OPERATORS, END_LINE_TOKENS, Token
 from lexer.lexer import token_type_is_reserved
 from parser.types import *
 
@@ -6,7 +8,22 @@ from parser.types import *
 class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
-        self.current_token = self.lexer.get_next_token()
+        self.current_token: Token = self.lexer.get_next_token()
+        self.type_handlers = {
+            TokenType.NUMBER: self.number,
+            TokenType.STRING: self.string,
+            TokenType.IDENTIFIER: self.identifier,
+            TokenType.LPAREN: self.paren_expr,
+            TokenType.LCURLY: self.object,
+            TokenType.LBRACKET: self.array,
+            **{t: self.unary for t in UNARY_OPERATORS}
+        }
+        self.identity_handlers = {
+            TokenType.IDENTIFIER: self.handle_identity_identifier,
+            TokenType.DOT: self.handle_identity_dot,
+            TokenType.LBRACKET: self.handle_identity_lbracket,
+            TokenType.LPAREN: self.handle_identity_lparen,
+        }
 
     def eat(self, token_type):
         if self.current_token.type == token_type:
@@ -14,73 +31,106 @@ class Parser:
         else:
             raise Exception(f"Parsing error: Expected {token_type}, got {self.current_token.type}")
 
-    def factor(self):
-        token = self.current_token
-        if token.type == TokenType.NUMBER:
-            self.eat(TokenType.NUMBER)
-            return Number(value=token.value)
-        elif token.type == TokenType.STRING:
-            self.eat(TokenType.STRING)
-            return String(value=token.value)
-        elif token.type == TokenType.IDENTIFIER:
-            identifier = self.identity() # identifier or function call (which results in Identifier)
-            if token.type in UNARY_OPERATORS:
-                self.eat(token.type)
-                value = BinaryOperation(operator=token.type, left=identifier)
-                return Assign(identifier=identifier, value=value, return_mode='before')
-            return identifier
-        elif token.type in UNARY_OPERATORS:
-            self.eat(token.type)
-            expr = self.expr()
-            value = BinaryOperation(operator=token.type, left=expr)
-            return Assign(identifier=expr, value=value, return_mode='after')
-        elif token.type == TokenType.LPAREN:
-            self.eat(TokenType.LPAREN)
-            expr = self.expr()
-            self.eat(TokenType.RPAREN)
-            return expr
-        else:
-            raise Exception(f"Unexpected token: {token}")
+    def number(self, token: Token):
+        self.eat(TokenType.NUMBER)
+        return Number(value=token.value)
 
-    def identity(self):
-        identifier = Identifier()
-        dot = True
-        while self.current_token.type in (TokenType.IDENTIFIER, TokenType.DOT, TokenType.LBRACKET, TokenType.LPAREN):
-            token = self.current_token
-            if token.type == TokenType.IDENTIFIER:
-                if not dot:
-                    raise Exception(f"Unexpected identifier: {token.value}")
-                self.eat(TokenType.IDENTIFIER)
-                identifier.address.append(String(value=token.value))
-                dot = False
-            elif token.type == TokenType.DOT:
-                if dot:
-                    raise Exception("Unexpected double dot")
-                self.eat(TokenType.DOT)
-                dot = True
-            elif token.type == TokenType.LBRACKET:
-                dot = False
-                self.eat(TokenType.LBRACKET)
-                index = self.expr()
-                self.eat(TokenType.RBRACKET)
-                identifier.address.append(index)
-            elif token.type == TokenType.LPAREN:
-                dot = False
-                self.eat(TokenType.LPAREN)
-                args = self.args() if self.current_token.type != TokenType.RPAREN else []
-                self.eat(TokenType.RPAREN)
-                identifier = Identifier(address=[FunctionCall(identifier=identifier, args=args)])
-        if dot:
-            raise Exception("Unexpected dot at the end of identifier")
-        identifier.validate_address() # raise exception if invalid indexing e.g. with float
+    def string(self, token: Token):
+        self.eat(TokenType.STRING)
+        return String(value=token.value)
+
+    def identifier(self, token: Token):
+        identifier = self.get_identity()  # identifier or function call (which results in Identifier)
+        token = self.current_token
+        if token.type in UNARY_OPERATORS:
+            self.eat(token.type)
+            value = BinaryOperation(operator=token.type, left=identifier)
+            return Assign(identifier=identifier, value=value, return_mode='before')
         return identifier
 
+    def unary(self, token: Token):
+        self.eat(token.type)
+        expr = self.expr() # if this is not an Identifier, it will raise an exception
+        value = BinaryOperation(operator=token.type, left=expr)
+        return Assign(identifier=expr, value=value, return_mode='after')
+
+    def paren_expr(self, token: Token):
+        self.eat(TokenType.LPAREN)
+        expr = self.expr()
+        self.eat(TokenType.RPAREN)
+        return expr
+
+    def object(self, token: Token):
+        obj = Object()
+        self.eat(TokenType.LCURLY)
+        while self.current_token.type != TokenType.RCURLY:
+            key = self.expr()
+            self.eat(TokenType.COLON)
+            obj.properties.append(ObjectProperty(key=key, value=self.expr()))
+            if self.current_token.type == TokenType.COMMA:
+                self.eat(TokenType.COMMA)
+        self.eat(TokenType.RCURLY)
+        return obj
+
+    def array(self, token: Token):
+        arr = Array()
+        self.eat(TokenType.LBRACKET)
+        while self.current_token.type != TokenType.RBRACKET:
+            arr.elements.append(self.expr())
+            if self.current_token.type == TokenType.COMMA:
+                self.eat(TokenType.COMMA)
+        self.eat(TokenType.RBRACKET)
+        return arr
+
     def args(self):
-        args = [self.expr()]
-        while self.current_token.type == TokenType.COMMA:
-            self.eat(TokenType.COMMA)
+        args = []
+        self.eat(TokenType.LPAREN)
+        while self.current_token.type != TokenType.RPAREN:
             args.append(self.expr())
+            if self.current_token.type == TokenType.COMMA:
+                self.eat(TokenType.COMMA)
+        self.eat(TokenType.RPAREN)
         return args
+
+    def factor(self):
+        token: Token = self.current_token
+        handler: Callable[[Token], Type] = self.type_handlers.get(token.type)
+        if handler:
+            return handler(token)
+        raise Exception(f"Unexpected token: {token}")
+
+    def handle_identity_identifier(self, identity: Identifier, token: Token, access_dot: bool):
+        if not access_dot:
+            raise Exception(f"Unexpected identifier: {token.value}")
+        self.eat(TokenType.IDENTIFIER)
+        identity.address.append(String(value=token.value))
+
+    def handle_identity_dot(self, identity: Identifier, token: Token, access_dot: bool):
+        if access_dot:
+            raise Exception("Unexpected double dot")
+        self.eat(TokenType.DOT)
+
+    def handle_identity_lbracket(self, identity: Identifier, token: Token, access_dot: bool):
+        self.eat(TokenType.LBRACKET)
+        index = self.expr()
+        self.eat(TokenType.RBRACKET)
+        identity.address.append(index)
+
+    def handle_identity_lparen(self, identity: Identifier, token: Token, access_dot: bool):
+        return Identifier(address=[FunctionCall(identifier=identity, args=self.args())])
+
+    def get_identity(self):
+        identity = Identifier()
+        access_dot: bool = True
+        while self.current_token.type in self.identity_handlers:
+            token = self.current_token
+            handler: Callable[[Identifier, Token, bool], Identifier | None] = self.identity_handlers[token.type]
+            identity_override = handler(identity, token, access_dot)
+            identity = identity_override if identity_override else identity
+            access_dot = True if token.type == TokenType.DOT else False
+        if access_dot:
+            raise Exception("Unexpected dot at the end of identifier")
+        return identity
 
     def exponent(self):
         node = self.factor()
@@ -122,24 +172,10 @@ class Parser:
                 return Assign(identifier=node, value=value)
         return node
 
-    def value_start_statement(self, expression):
-        token = self.current_token
-        if token.type in ARITHMETIC_OPERATORS:
-            self.eat(token.type)
-            return BinaryOperation(operator=token.type, left=expression, right=self.expr())
-        raise Exception(f"Unexpected operator {token.type} for type {expression}")
-
-
     def statement(self):
         if token_type_is_reserved(self.current_token.type):
             return # TODO handle reserved keywords
-        expression = self.expr()
-        if isinstance(expression, (Primitive, BinaryOperation)):
-            if self.current_token.type not in END_LINE_TOKENS:
-                raise Exception(f"Expected end of line token, got {self.current_token.type}")
-            return expression
-
-        return expression
+        return self.expr()
 
     def parse(self):
         ast = []
