@@ -1,15 +1,19 @@
 from lexer.types import *
 
 
-def token_type_is_reserved(token_type: TokenType) -> bool:
-    return token_type in RESERVED_KEYWORDS.values()
-
-
 class Lexer:
     def __init__(self, text: str):
         self.text = text
         self.pos = 0
         self.current_char = self.text[self.pos] if self.text else None
+        self.special_tokenizers = {
+            '*': self.tokenize_asterisk,
+            '/': self.tokenize_forward_slash,
+            '%': self.tokenize_percent,
+            '=': self.tokenize_equals,
+            '-': self.tokenize_minus,
+            '+': self.tokenize_plus,
+        }
 
     def peek(self):
         if self.pos + 1 < len(self.text):
@@ -26,13 +30,13 @@ class Lexer:
 
     def number(self):
         result = ''
-        dot = False
-        while self.current_char is not None and (self.current_char.isdigit() or (self.current_char == '.' and not dot)):
+        floating_point = False
+        while self.current_char is not None and (self.current_char.isdigit() or (self.current_char == '.' and not floating_point)):
             if self.current_char == '.':
-                dot = True
+                floating_point = True
             result += self.current_char
             self.advance()
-        return Token(type=TokenType.NUMBER, value=float(result) if dot else int(result))
+        return Token(type=TokenType.NUMBER, value=float(result) if floating_point else int(result))
 
     def string(self, start_char: str):
         result = ''
@@ -57,94 +61,76 @@ class Lexer:
             return Token(type=TokenType.BOOL, value=True if result == 'true' else False)
         return Token(type=TokenType.IDENTIFIER, value=result)
 
-    def get_next_token(self) -> Token:
-        while self.current_char is not None:
-            if self.current_char.isspace():
-                self.skip_whitespace()
-                continue
-            if self.current_char.isdigit():
-                return self.number()
-            if self.current_char.isalpha() or self.current_char == '_':
-                return self.keyword() # identifiers and keywords
-            if self.current_char in ('"', "'"):
-                return self.string(self.current_char)
-            if self.current_char == '.':
-                self.advance()
-                return Token(type=TokenType.DOT, value='.')
-            if self.current_char == ',':
-                self.advance()
-                return Token(type=TokenType.COMMA, value=',')
-            if self.current_char == '[':
-                self.advance()
-                return Token(type=TokenType.LBRACKET, value='[')
-            if self.current_char == ']':
-                self.advance()
-                return Token(type=TokenType.RBRACKET, value=']')
-            if self.current_char == '(':
-                self.advance()
-                return Token(type=TokenType.LPAREN, value='(')
-            if self.current_char == ')':
-                self.advance()
-                return Token(type=TokenType.RPAREN, value=')')
-            if self.current_char == '{':
-                self.advance()
-                return Token(type=TokenType.LCURLY, value='{')
-            if self.current_char == '}':
-                self.advance()
-                return Token(type=TokenType.RCURLY, value='}')
-            if self.current_char == '+':
-                self.advance()
-                if self.current_char == '+':
-                    self.advance()
-                    return Token(type=TokenType.INCREMENT, value='++')
-                if self.current_char == '=':
-                    self.advance()
-                    return Token(type=TokenType.ADDITION_ASSIGN, value='+=')
-                return Token(type=TokenType.PLUS, value='+')
-            if self.current_char == '-':
-                self.advance()
-                if self.current_char == '-':
-                    self.advance()
-                    return Token(type=TokenType.DECREMENT, value='--')
-                if self.current_char == '=':
-                    self.advance()
-                    return Token(type=TokenType.SUBTRACTION_ASSIGN, value='-=')
-                return Token(type=TokenType.MINUS, value='-')
-            if self.current_char == '*':
-                self.advance()
-                if self.current_char == '*':
-                    self.advance()
-                    if self.current_char == '=':
-                        self.advance()
-                        return Token(type=TokenType.EXPONENT_ASSIGN, value='**=')
-                    return Token(type=TokenType.EXPONENT, value='**')
-                if self.current_char == '=':
-                    self.advance()
-                    return Token(type=TokenType.MULTIPLICATION_ASSIGN, value='*=')
-                return Token(type=TokenType.MULTIPLY, value='*')
-            if self.current_char == '/':
-                self.advance()
-                if self.current_char == '=':
-                    self.advance()
-                    return Token(type=TokenType.DIVISION_ASSIGN, value='/=')
-                return Token(type=TokenType.DIVIDE, value='/')
-            if self.current_char == '%':
-                self.advance()
-                if self.current_char == '=':
-                    self.advance()
-                    return Token(type=TokenType.MODULUS_ASSIGN, value='%=')
-                return Token(type=TokenType.MODULUS, value='%')
+    def tokenize_asterisk(self):
+        self.advance()
+        if self.current_char == '*':
+            self.advance()
             if self.current_char == '=':
                 self.advance()
-                if self.current_char == '=':
-                    self.advance()
-                    return Token(type=TokenType.EQUALS, value='==')
-                return Token(type=TokenType.ASSIGN, value='=')
-            if self.current_char == ';':
+                return Token(type=TokenType.EXPONENT_ASSIGN, value='**=')
+            return Token(type=TokenType.EXPONENT, value='**')
+        if self.current_char == '=':
+            self.advance()
+            return Token(type=TokenType.MULTIPLICATION_ASSIGN, value='*=')
+        return Token(type=TokenType.MULTIPLY, value='*')
+
+    def tokenize_forward_slash(self):
+        self.advance()
+        if self.current_char == '=':
+            self.advance()
+            return Token(type=TokenType.DIVISION_ASSIGN, value='/=')
+        return Token(type=TokenType.DIVIDE, value='/')
+
+    def tokenize_percent(self):
+        self.advance()
+        if self.current_char == '=':
+            self.advance()
+            return Token(type=TokenType.MODULUS_ASSIGN, value='%=')
+        return Token(type=TokenType.MODULUS, value='%')
+
+    def tokenize_equals(self):
+        self.advance()
+        if self.current_char == '=':
+            self.advance()
+            return Token(type=TokenType.EQUALS, value='==')
+        return Token(type=TokenType.ASSIGN, value='=')
+
+    def tokenize_minus(self):
+        self.advance()
+        if self.current_char == '-':
+            self.advance()
+            return Token(type=TokenType.DECREMENT, value='--')
+        if self.current_char == '=':
+            self.advance()
+            return Token(type=TokenType.SUBTRACTION_ASSIGN, value='-=')
+        return Token(type=TokenType.MINUS, value='-')
+
+    def tokenize_plus(self):
+        self.advance()
+        if self.current_char == '+':
+            self.advance()
+            return Token(type=TokenType.INCREMENT, value='++')
+        if self.current_char == '=':
+            self.advance()
+            return Token(type=TokenType.ADDITION_ASSIGN, value='+=')
+        return Token(type=TokenType.PLUS, value='+')
+
+    def get_next_token(self) -> Token:
+        while self.current_char is not None:
+            char = self.current_char
+            if char.isspace():
+                self.skip_whitespace()
+                continue
+            if char.isdigit():
+                return self.number()
+            if char.isalpha() or char == '_':
+                return self.keyword() # identifiers and keywords
+            if char in ('"', "'"):
+                return self.string(char)
+            if char in SINGLE_CHAR_TOKENS:
                 self.advance()
-                return Token(type=TokenType.SEMICOLON, value=';')
-            if self.current_char == ':':
-                self.advance()
-                return Token(type=TokenType.COLON, value=':')
-            raise Exception(f"Invalid character: {self.current_char}")
+                return Token(type=SINGLE_CHAR_TOKENS[char], value=char)
+            if char in self.special_tokenizers:
+                return self.special_tokenizers[char]()
+            raise Exception(f"Invalid character: {char}")
         return Token(type=TokenType.EOF, value=None)

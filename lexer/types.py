@@ -72,15 +72,6 @@ END_LINE_TOKENS = {
     TokenType.EOF
 }
 
-ARITHMETIC_OPERATORS = {
-    TokenType.PLUS,
-    TokenType.MINUS,
-    TokenType.MULTIPLY,
-    TokenType.DIVIDE,
-    TokenType.MODULUS,
-    TokenType.EXPONENT
-}
-
 ASSIGNMENT_OPERATORS = {
     TokenType.ASSIGN,
     TokenType.ADDITION_ASSIGN,
@@ -115,10 +106,23 @@ ARITHMETIC_TYPE_TO_CHAR = {
     TokenType.EXPONENT: '**'
 }
 
+SINGLE_CHAR_TOKENS = {
+    '(': TokenType.LPAREN,
+    ')': TokenType.RPAREN,
+    '[': TokenType.LBRACKET,
+    ']': TokenType.RBRACKET,
+    '{': TokenType.LCURLY,
+    '}': TokenType.RCURLY,
+    ':': TokenType.COLON,
+    ';': TokenType.SEMICOLON,
+    ',': TokenType.COMMA,
+    '.': TokenType.DOT,
+}
+
 
 class Token(BaseModel):
     type: TokenType = TokenType.BLANK
-    value: Any
+    value: Any = None
 
     def __repr__(self):
         return f"Token({self.type.value}: {self.value})"

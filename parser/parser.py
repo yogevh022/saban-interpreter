@@ -1,7 +1,6 @@
 from typing import Callable
 
-from lexer.types import ASSIGNMENT_OPERATORS, ARITHMETIC_OPERATORS, END_LINE_TOKENS, Token
-from lexer.lexer import token_type_is_reserved
+from lexer.types import ASSIGNMENT_OPERATORS, END_LINE_TOKENS, Token, RESERVED_KEYWORDS
 from parser.types import *
 
 
@@ -173,7 +172,7 @@ class Parser:
         return node
 
     def statement(self):
-        if token_type_is_reserved(self.current_token.type):
+        if self.current_token.type in RESERVED_KEYWORDS.values():
             return # TODO handle reserved keywords
         return self.expr()
 
