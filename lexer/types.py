@@ -20,6 +20,7 @@ class TokenType(str, Enum):
     DOT = 'DOT'
 
     # special
+    AT = 'AT'
     BLANK = 'BLANK'
     EOF = 'EOF'
 
@@ -126,6 +127,7 @@ SINGLE_CHAR_TOKENS = {
     ';': TokenType.SEMICOLON,
     ',': TokenType.COMMA,
     '.': TokenType.DOT,
+    '@': TokenType.AT,
 }
 
 

@@ -4,6 +4,16 @@ from lexer.types import ASSIGNMENT_OPERATORS, END_LINE_TOKENS, Token, RESERVED_K
     AUGMENTED_ASSIGNMENT_TO_ARITHMETIC
 from parser.types import *
 
+class BuiltIns:
+    root = '7a8d77e7-300a-4580-a4b2-84c20ee3d294'
+    registered = ['print']
+
+    @classmethod
+    def get_identifier(cls, name: str) -> Identifier:
+        if name not in cls.registered:
+            raise Exception(f"Built-in function '{name}' does not exist")
+        return Identifier(address=[String(value=cls.root), String(value=name)])
+
 
 class Parser:
     def __init__(self, lexer):
@@ -83,13 +93,10 @@ class Parser:
         return arr
 
     def args(self):
-        args = []
-        self.eat(TokenType.LPAREN)
-        while self.current_token.type != TokenType.RPAREN:
+        args = [self.expr()]
+        while self.current_token.type == TokenType.COMMA:
+            self.eat(TokenType.COMMA)
             args.append(self.expr())
-            if self.current_token.type == TokenType.COMMA:
-                self.eat(TokenType.COMMA)
-        self.eat(TokenType.RPAREN)
         return args
 
     def factor(self):
@@ -117,7 +124,10 @@ class Parser:
         identity.address.append(index)
 
     def handle_identity_lparen(self, identity: Identifier, token: Token, access_dot: bool):
-        return Identifier(address=[FunctionCall(identifier=identity, args=self.args())])
+        self.eat(TokenType.LPAREN)
+        args = self.args() if self.current_token.type != TokenType.RPAREN else []
+        self.eat(TokenType.RPAREN)
+        return Identifier(address=[FunctionCall(identifier=identity, args=args)])
 
     def get_identity(self):
         identity = Identifier()
@@ -131,6 +141,15 @@ class Parser:
         if access_dot:
             raise Exception("Unexpected dot at the end of identifier")
         return identity
+
+    def macro_print(self):
+        self.eat(TokenType.AT)
+        args = self.args()
+        if self.current_token.type not in (TokenType.SEMICOLON, TokenType.EOF):
+            raise Exception(f"Unexpected token after print arguments: {self.current_token.type}")
+        self.eat(self.current_token.type)
+        print_identifier = BuiltIns.get_identifier('print')
+        return Identifier(address=[FunctionCall(identifier=print_identifier, args=args)])
 
     def assignment(self, node: Type):
         token = self.current_token
@@ -169,6 +188,8 @@ class Parser:
     def statement(self):
         if self.current_token.type in RESERVED_KEYWORDS.values():
             return # TODO handle reserved keywords
+        if self.current_token.type == TokenType.AT:
+            return self.macro_print()
         return self.expr()
 
     def parse(self):
