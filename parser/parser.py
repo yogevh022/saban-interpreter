@@ -1,6 +1,5 @@
-from typing import Literal
-
-from lexer import token_type_is_reserved, TokenType, ASSIGNMENT_OPERATORS, ARITHMETIC_OPERATORS, END_LINE_TOKENS
+from lexer.types import ASSIGNMENT_OPERATORS, ARITHMETIC_OPERATORS, END_LINE_TOKENS
+from lexer.lexer import token_type_is_reserved
 from parser.types import *
 
 
@@ -24,7 +23,17 @@ class Parser:
             self.eat(TokenType.STRING)
             return String(value=token.value)
         elif token.type == TokenType.IDENTIFIER:
-            return self.identity() # identifier or function call (which results in Identifier)
+            identifier = self.identity() # identifier or function call (which results in Identifier)
+            if token.type in UNARY_OPERATORS:
+                self.eat(token.type)
+                value = BinaryOperation(operator=token.type, left=identifier)
+                return Assign(identifier=identifier, value=value, return_mode='before')
+            return identifier
+        elif token.type in UNARY_OPERATORS:
+            self.eat(token.type)
+            expr = self.expr()
+            value = BinaryOperation(operator=token.type, left=expr)
+            return Assign(identifier=expr, value=value, return_mode='after')
         elif token.type == TokenType.LPAREN:
             self.eat(TokenType.LPAREN)
             expr = self.expr()
@@ -73,15 +82,23 @@ class Parser:
             args.append(self.expr())
         return args
 
-    def term(self):
+    def exponent(self):
         node = self.factor()
+        while self.current_token.type == TokenType.EXPONENT:
+            token = self.current_token
+            self.eat(TokenType.EXPONENT)
+            node = BinaryOperation(operator=token.type, left=node, right=self.factor())
+        return node
+
+    def term(self):
+        node = self.exponent()
         while self.current_token.type in (TokenType.MULTIPLY, TokenType.DIVIDE):
             token = self.current_token
             if token.type == TokenType.MULTIPLY:
                 self.eat(TokenType.MULTIPLY)
             elif token.type == TokenType.DIVIDE:
                 self.eat(TokenType.DIVIDE)
-            node = BinaryOperation(operator=token.type, left=node, right=self.factor())
+            node = BinaryOperation(operator=token.type, left=node, right=self.exponent())
         return node
 
     def expr(self):
@@ -93,27 +110,17 @@ class Parser:
             elif token.type == TokenType.MINUS:
                 self.eat(TokenType.MINUS)
             node = BinaryOperation(operator=token.type, left=node, right=self.term())
+        else:
+            if self.current_token.type in ASSIGNMENT_OPERATORS:
+                token = self.current_token
+                self.eat(token.type)
+                value = self.expr()
+                value = value if token.type == TokenType.ASSIGN else (
+                BinaryOperation(operator=token.type, left=node, right=value))
+                if not isinstance(node, Identifier):
+                    raise Exception(f"Cannot assign value to non-identifier: {node}")
+                return Assign(identifier=node, value=value)
         return node
-
-    def identifier_start_statement(self, expression):
-        token = self.current_token
-        if token.type in ASSIGNMENT_OPERATORS:
-            self.eat(token.type)
-            value = self.statement()
-            value = BinaryOperation(operator=token.type, left=expression,
-                                    right=value) if token.type != TokenType.ASSIGN else value
-            return Assign(identifier=expression, value=value)
-        if token.type in (TokenType.INCREMENT, TokenType.DECREMENT):
-            self.eat(token.type)
-            if self.current_token.type not in END_LINE_TOKENS:
-                raise Exception(
-                    f"Expected end of line after increment/decrement operator, got {self.current_token.type}")
-            value = BinaryOperation(operator=token.type, left=expression, right=Number(value=1))
-            return Assign(identifier=expression, value=value)
-        if token.type in (TokenType.SEMICOLON, TokenType.NEWLINE, TokenType.EOF):
-            self.eat(token.type)
-            return expression
-        raise Exception(f"Unexpected token: {token}")
 
     def value_start_statement(self, expression):
         token = self.current_token
@@ -127,13 +134,18 @@ class Parser:
         if token_type_is_reserved(self.current_token.type):
             return # TODO handle reserved keywords
         expression = self.expr()
-        if isinstance(expression, Identifier):
-            return self.identifier_start_statement(expression)
         if isinstance(expression, (Primitive, BinaryOperation)):
-            return self.value_start_statement(expression)
+            if self.current_token.type not in END_LINE_TOKENS:
+                raise Exception(f"Expected end of line token, got {self.current_token.type}")
+            return expression
 
         return expression
 
     def parse(self):
-        z = self.statement()
-        print(z)
+        ast = []
+        while self.current_token.type != TokenType.EOF:
+            if self.current_token.type in END_LINE_TOKENS:
+                self.eat(self.current_token.type)
+                continue
+            ast.append(self.statement())
+        return ast

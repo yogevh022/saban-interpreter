@@ -1,7 +1,7 @@
-from pydantic import BaseModel
-from typing import List, Union, Any, Literal
+from pydantic import BaseModel, model_validator
+from typing import List, Any, Literal, Optional
 
-from lexer import TokenType
+from lexer.types import TokenType, UNARY_OPERATORS
 
 
 class Type(BaseModel):
@@ -51,9 +51,9 @@ class Identifier(Type):
 
 
 class BinaryOperation(Type):
-    operator: Literal[TokenType.PLUS, TokenType.MINUS, TokenType.MULTIPLY, TokenType.DIVIDE, TokenType.EXPONENT]
+    operator: Literal[TokenType.PLUS, TokenType.MINUS, TokenType.MULTIPLY, TokenType.DIVIDE, TokenType.EXPONENT, TokenType.INCREMENT, TokenType.DECREMENT]
     left: Type
-    right: Type
+    right: Optional[Type]
 
     def __str__(self):
         return f"BinaryOperation({self.left} {self.operator.value} {self.right})"
@@ -61,6 +61,18 @@ class BinaryOperation(Type):
     def __repr__(self):
         return self.__str__()
 
+    @model_validator(mode='before')
+    @classmethod
+    def validate_binary_operation(cls, values):
+        if values['operator'] in UNARY_OPERATORS:
+            values['right'] = Number(value=1)
+            if values['operator'] == TokenType.INCREMENT:
+                values['operator'] = TokenType.PLUS
+            elif values['operator'] == TokenType.DECREMENT:
+                values['operator'] = TokenType.MINUS
+        elif values['right'] is None:
+            raise ValueError("BinaryOperation requires a right operand for non-unary operators")
+        return values
 
 class FunctionCall(Type):
     identifier: Identifier # identifier of the function
@@ -76,6 +88,7 @@ class FunctionCall(Type):
 class Assign(Type):
     identifier: Identifier
     value: Type
+    return_mode: Literal['before', 'after'] = 'after'
 
     def __str__(self):
         return f"Assign({self.identifier} = {self.value})"
