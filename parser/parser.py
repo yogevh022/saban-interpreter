@@ -1,6 +1,7 @@
 from typing import Callable
 
-from lexer.types import ASSIGNMENT_OPERATORS, END_LINE_TOKENS, Token, RESERVED_KEYWORDS
+from lexer.types import ASSIGNMENT_OPERATORS, END_LINE_TOKENS, Token, RESERVED_KEYWORDS, \
+    AUGMENTED_ASSIGNMENT_TO_ARITHMETIC
 from parser.types import *
 
 
@@ -131,6 +132,14 @@ class Parser:
             raise Exception("Unexpected dot at the end of identifier")
         return identity
 
+    def assignment(self, node: Type):
+        token = self.current_token
+        self.eat(token.type)
+        value = self.expr()
+        value = value if token.type == TokenType.ASSIGN else (
+            BinaryOperation(operator=AUGMENTED_ASSIGNMENT_TO_ARITHMETIC[token.type], left=node, right=value))
+        return Assign(identifier=node, value=value) # will raise if node is not an Identifier
+
     def exponent(self):
         node = self.factor()
         while self.current_token.type == TokenType.EXPONENT:
@@ -143,10 +152,7 @@ class Parser:
         node = self.exponent()
         while self.current_token.type in (TokenType.MULTIPLY, TokenType.DIVIDE):
             token = self.current_token
-            if token.type == TokenType.MULTIPLY:
-                self.eat(TokenType.MULTIPLY)
-            elif token.type == TokenType.DIVIDE:
-                self.eat(TokenType.DIVIDE)
+            self.eat(token.type)
             node = BinaryOperation(operator=token.type, left=node, right=self.exponent())
         return node
 
@@ -154,21 +160,10 @@ class Parser:
         node = self.term()
         while self.current_token.type in (TokenType.PLUS, TokenType.MINUS):
             token = self.current_token
-            if token.type == TokenType.PLUS:
-                self.eat(TokenType.PLUS)
-            elif token.type == TokenType.MINUS:
-                self.eat(TokenType.MINUS)
+            self.eat(token.type)
             node = BinaryOperation(operator=token.type, left=node, right=self.term())
-        else:
-            if self.current_token.type in ASSIGNMENT_OPERATORS:
-                token = self.current_token
-                self.eat(token.type)
-                value = self.expr()
-                value = value if token.type == TokenType.ASSIGN else (
-                BinaryOperation(operator=token.type, left=node, right=value))
-                if not isinstance(node, Identifier):
-                    raise Exception(f"Cannot assign value to non-identifier: {node}")
-                return Assign(identifier=node, value=value)
+        if self.current_token.type in ASSIGNMENT_OPERATORS:
+            return self.assignment(node)
         return node
 
     def statement(self):

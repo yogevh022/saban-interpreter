@@ -14,7 +14,7 @@ if __name__ == '__main__':
     """
     i7 = """a= {1: 2, 'b': {1: 22}};"""
     i8 = """a = [1, 2, 3]; a;a[0] = 4; a;"""
-    i9 = """a = 2; ++a; a;"""
+    i9 = """a = 2; a += b=3"""
     lx = Lexer(i9)
     parser = Parser(lx)
     ast = parser.parse()

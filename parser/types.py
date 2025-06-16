@@ -108,7 +108,7 @@ class Assign(Type):
     @classmethod
     def validate_assign(cls, values):
         if not isinstance(values['identifier'], Identifier):
-            raise ValueError(f"Assign identifier must be an Identifier, got {type(values['identifier']).__name__}")
+            raise ValueError(f"Cannot assign value to non-identifier: {type(values['identifier']).__name__}")
         if not isinstance(values['value'], Type):
             raise ValueError(f"Assign value must be a Type, got {type(values['value']).__name__}")
         return values

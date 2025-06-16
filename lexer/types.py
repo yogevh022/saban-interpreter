@@ -82,6 +82,15 @@ ASSIGNMENT_OPERATORS = {
     TokenType.EXPONENT_ASSIGN
 }
 
+AUGMENTED_ASSIGNMENT_TO_ARITHMETIC = {
+    TokenType.ADDITION_ASSIGN: TokenType.PLUS,
+    TokenType.SUBTRACTION_ASSIGN: TokenType.MINUS,
+    TokenType.MULTIPLICATION_ASSIGN: TokenType.MULTIPLY,
+    TokenType.DIVISION_ASSIGN: TokenType.DIVIDE,
+    TokenType.MODULUS_ASSIGN: TokenType.MODULUS,
+    TokenType.EXPONENT_ASSIGN: TokenType.EXPONENT
+}
+
 RESERVED_KEYWORDS = {
     'if': TokenType.IF,
     'else': TokenType.ELSE,
